@@ -1,5 +1,5 @@
-@font-face{font-family:"TT2020";src:url("../fonts/tt2020.woff2") format("woff2");font-display:swap}
-@font-face{font-family:"Kursiv";src:url("../fonts/kursiv.woff2") format("woff2");font-display:swap}
+@font-face{font-family:"TT2020";src:url("tt2020.woff2") format("woff2");font-display:swap}
+@font-face{font-family:"Kursiv";src:url("kursiv.woff2") format("woff2");font-display:swap}
 
 :root{
   --ground:#0b0d10;

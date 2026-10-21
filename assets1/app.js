@@ -3,7 +3,7 @@
 const G = window.GEO, C = window.CONTENT, PF = window.PROJECT_FILES || {};
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
-const IMG = 'assets/img/', VID = 'assets/video/', PRJ = 'assets/projects/';
+const IMG = 'assets1/', VID = '', PRJ = 'assets1/';
 const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const ORDER = [1, 2, 4, 8, 9];
 const STOPS = [1, 2, 4, 9]; // 8 is passed through without stopping
