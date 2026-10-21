@@ -820,6 +820,10 @@ function initPapers() {
 
 /* ------------------------------------------------------------ slide 10: FAQ */
 function initFaq() {
+  const sc = $('#faqScroll'), f = $('#faq');
+  const atEnd = () => f.classList.toggle('end', sc.scrollTop + sc.clientHeight >= sc.scrollHeight - 8);
+  sc.addEventListener('scroll', atEnd, { passive: true }); addEventListener('resize', atEnd);
+  setTimeout(atEnd, 500);
   $('#faqCols').innerHTML = C.faq.map(s => `<section class="faq-sec"><h3>${s.section}</h3>${s.items.map(([q, a]) =>
     `<div class="faq-item"><p class="faq-q">${q}</p><p class="faq-a">${a}</p></div>`).join('')}</section>`).join('');
   $('#faqBack').addEventListener('click', () => go(9));
