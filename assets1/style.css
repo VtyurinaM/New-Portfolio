@@ -347,3 +347,27 @@ body{font-weight:700}
 .faq-item{margin:0 0 1.05em}
 .faq-q{font-family:var(--ui);font-weight:700;font-size:var(--faq-q,19px);line-height:1.28;margin:0 0 .35em;color:#14204a;-webkit-text-stroke:.5px currentColor}
 .faq-a{font-family:var(--ui);font-size:var(--faq-a,14px);line-height:1.5;color:#1c2337;padding-left:.9em;border-left:2px solid rgba(20,32,74,.18)}
+
+/* ================= phones held upright ================= */
+.m-hint{display:none}
+body.portrait .m-hint{display:block;position:absolute;left:16px;right:16px;margin:0;text-align:center;font-family:var(--ui);font-weight:700;
+  font-size:15px;line-height:1.45;color:#fff6e8;text-shadow:0 1px 10px rgba(0,0,0,.6);-webkit-text-stroke:.4px currentColor;opacity:0;transition:opacity .6s var(--ease) .2s}
+body.portrait .m-hint b{color:#ffe2b0}
+body.portrait .slide.ready .m-hint,body.portrait .slide[data-slide="1"].on .m-hint{opacity:1}
+/* the picture's top and bottom edges dissolve into its own blurred backdrop, so the screen reads as one image */
+body.portrait .slide.band:not([data-slide="6"]) .stage{-webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 11%,#000 89%,transparent 100%);mask-image:linear-gradient(to bottom,transparent 0,#000 11%,#000 89%,transparent 100%)}
+body.portrait .tv{-webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 11%,#000 89%,transparent 100%);mask-image:linear-gradient(to bottom,transparent 0,#000 11%,#000 89%,transparent 100%)}
+body.portrait .bd{filter:blur(28px) brightness(.62) saturate(1.15)}
+body.portrait #vbd{filter:blur(28px) brightness(.62) saturate(1.15)}
+/* contacts: no hover on a phone - the hint under the papers explains them */
+body.portrait .paper .tip{display:none}
+/* FAQ: a whole sheet of the same crumpled paper, read by scrolling */
+#faq.sheet::before{inset:0;background:url("faq-paper.jpg") center/cover no-repeat;filter:none;border-radius:6px;
+  box-shadow:0 18px 50px rgba(0,0,0,.55),0 2px 6px rgba(0,0,0,.4)}
+#faq.sheet .faq-scroll{inset:18px 14px 10px 16px}
+#faq.sheet .faq-back{left:6px;top:calc(100% + 14px);color:#fff6e8;font-size:15px;text-shadow:0 1px 8px rgba(0,0,0,.6)}
+body.portrait .slide[data-slide="10"] .stage{opacity:.35}
+@media (orientation:landscape) and (max-height:460px){
+  .hint{display:none}
+  #faq.sheet .faq-back{top:calc(100% + 8px)}
+}

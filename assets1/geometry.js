@@ -6,7 +6,7 @@ window.GEO = {
    "w": 2122,
    "h": 1193,
    "zoom": 9,
-   "zoomP": 1.35
+   "zoomP": 1.07
   },
   "2": {
    "img": "s2.jpg",

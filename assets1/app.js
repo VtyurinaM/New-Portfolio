@@ -37,6 +37,8 @@ function place(el, box, n) { // box in image px -> % of stage
 }
 
 function layout() {
+  state.portrait = innerWidth < innerHeight;
+  body.classList.toggle('portrait', state.portrait);
   for (const n of Object.keys(G.slides)) state.rects[n] = fit(+n);
   state.rects[6] = rect6card();
   for (const n of Object.keys(G.slides)) {
@@ -45,9 +47,22 @@ function layout() {
     st.style.width = r.w + 'px'; st.style.height = r.h + 'px';
     st.style.transform = `translate(${r.x}px,${r.y}px)`;
   }
+  for (const n of Object.keys(G.slides)) {   // a picture narrower than the screen: its edges melt into its own backdrop
+    const r = state.rects[n]; slides[n].classList.toggle('band', r.h < innerHeight - 4 || r.w < innerWidth - 4);
+  }
+  layoutMobile();
   layoutAbout(); layoutViewer(); layoutFaq(); layoutRingUI();
   if (state.cur === 4) renderRing();
   if (seg.active) seg.recalc();
+}
+
+/* phones held upright: short captions in the free space above / below the picture */
+function layoutMobile() {
+  const below = (n, el, gap = 18) => {
+    const r = state.rects[n]; if (!el) return;
+    el.style.top = Math.min(innerHeight - el.offsetHeight - 70, r.y + r.h + gap) + 'px';
+  };
+  below(1, $('#mHint1')); below(9, $('#mHint9'), 26);
 }
 
 /* ------------------------------------------------------------ images */
@@ -177,7 +192,27 @@ function setMatrix(el, u) {
   const m = seg.MA.map((v, i) => v + (seg.MB[i] - v) * e);
   el.style.transform = `matrix(${m.join(',')})`;
 }
-function drawBackdrop(v) { try { vctx.drawImage(v, 0, 0, vbd.width, vbd.height); } catch (_) {} }
+let vbdRun = 0;
+function drawBackdrop(v) {
+  try {
+    const cw = vbd.clientWidth || innerWidth, ch = vbd.clientHeight || innerHeight, A = cw / ch;
+    const W = 48, H = Math.max(8, Math.round(W / A));
+    if (vbd.width !== W || vbd.height !== H) { vbd.width = W; vbd.height = H; }
+    const vw = v.videoWidth || 1280, vh = v.videoHeight || 720;      // cover-crop, like the slides' own backdrops
+    let sw = vw, sh = vw / A; if (sh > vh) { sh = vh; sw = vh * A; }
+    vctx.drawImage(v, (vw - sw) / 2, (vh - sh) / 2, sw, sh, 0, 0, W, H);
+  } catch (_) {}
+}
+function backdropOn() {
+  const id = ++vbdRun;
+  const loop = () => { if (id !== vbdRun) return; if (seg.el) drawBackdrop(seg.el); requestAnimationFrame(loop); };
+  loop();
+  vbd.style.transition = 'none'; vbd.classList.add('show');
+}
+function backdropOff(ms) {
+  vbd.style.transition = `opacity ${ms}ms linear`; vbd.classList.remove('show');
+  setTimeout(() => { if (!vbd.classList.contains('show')) vbdRun++; }, ms + 50);
+}
 function videoReady(v) {
   return new Promise((res, rej) => {
     if (v.readyState >= 2) return res();
@@ -196,7 +231,7 @@ function firstFrame(v) {
 }
 function hideVideos() {
   vids.forEach(v => { v.style.transition = 'none'; v.classList.remove('show'); v.pause(); });
-  vbd.classList.remove('show'); seg.active = false;
+  vbd.classList.remove('show'); vbdRun++; seg.active = false;
 }
 /* opt.chained: the previous clip is still on screen (cut straight into this one)
    opt.hold:    keep this clip on screen at its last frame (another clip follows) */
@@ -220,6 +255,7 @@ async function runSeg(name, rev, from, to, opt = {}) {
   await firstFrame(v);
   v.style.transition = `opacity ${fadeIn}ms linear`;
   v.classList.add('show');
+  if (state.portrait) { drawBackdrop(v); backdropOn(); }   // the previous screen never shows around the clip
   await wait(fadeIn + 16);
   if (prev !== v) { prev.style.transition = 'none'; prev.classList.remove('show'); prev.pause(); }
   vcur = vids.indexOf(v);
@@ -242,6 +278,7 @@ async function runSeg(name, rev, from, to, opt = {}) {
   if (opt.hold) return;
   v.style.transition = `opacity ${fadeOut}ms linear`;
   v.classList.remove('show');
+  backdropOff(fadeOut);
   await wait(fadeOut);
   v.pause(); seg.active = false;
 }
@@ -320,6 +357,7 @@ async function fadeStep(from, to, name, ms) { // a soft dissolve instead of a cl
     hideSlide(from, true); showSlide(to, true);
     const v = vids[vcur];
     v.style.transition = `opacity ${ms}ms cubic-bezier(.4,0,.2,1)`; v.classList.remove('show');
+    backdropOff(ms);
     await wait(ms); v.pause(); seg.active = false; state.held = false;
   } else {
     slides[to].style.zIndex = 3; slides[from].style.zIndex = 2;
@@ -423,11 +461,12 @@ function layoutAbout() {
   const top = topSafe() + 10;
   [A, B].forEach(e => e.removeAttribute('style'));
   box.classList.remove('stacked');
-  if (Math.min(availL, availR) >= 250) {
+  const wide = vw > vh;     // landscape (also a phone on its side): texts stay left and right of her legs
+  if (Math.min(availL, availR) >= 250 || (wide && Math.min(availL, availR) >= 150)) {
     const wA = Math.min(availL, 600), wB = Math.min(availR, 560);
     const f = Math.min(wA, wB);
-    box.style.setProperty('--about-h', clamp(f * .095, 26, 64) + 'px');
-    box.style.setProperty('--about-p', clamp(f * .066, 20, 38) + 'px');
+    box.style.setProperty('--about-h', clamp(Math.min(f * .095, vh * .056), 16, 64) + 'px');
+    box.style.setProperty('--about-p', clamp(Math.min(f * .066, vh * .037), 12, 38) + 'px');
     Object.assign(A.style, { left: m + 'px', width: wA + 'px', top: '50%', translate: '0 -62%' });
     Object.assign(B.style, { left: (legsR + gap) + 'px', width: wB + 'px', top: '50%', translate: '0 -38%' });
   } else {
@@ -785,6 +824,7 @@ function initFaq() {
     `<div class="faq-item"><p class="faq-q">${q}</p><p class="faq-a">${a}</p></div>`).join('')}</section>`).join('');
   $('#faqBack').addEventListener('click', () => go(9));
 }
+const FAQ_CROP = [190, 150, 1130, 640], FAQ_PAPER = [940, 490];   // the paper of slide 10, cut out for the phone sheet
 function layoutFaq() {
   const r = state.rects[10]; if (!r) return;
   const P = G.geo.paper10, vw = innerWidth, vh = innerHeight;
@@ -794,12 +834,15 @@ function layoutFaq() {
   x0 = Math.max(x0, 18); x1 = Math.min(x1, vw - 26);
   y0 = Math.max(y0, topSafe() + 16); y1 = Math.min(y1, vh - 24);
   y1 -= 40; // room for the back link
-  const f = $('#faq');
+  const f = $('#faq'), sheet = state.portrait || vh < 560;   // phones: the whole screen is the sheet
+  f.classList.toggle('sheet', sheet);
+  if (sheet) { const sw = Math.min(vw - 20, Math.max(560, vh * 1.25)); x0 = (vw - sw) / 2; x1 = x0 + sw; y0 = Math.max(10, vh * .02); y1 = vh - (state.portrait ? 64 : 48); }
   Object.assign(f.style, { left: x0 + 'px', top: y0 + 'px', width: (x1 - x0) + 'px', height: (y1 - y0) + 'px' });
   const w = x1 - x0;
-  const one = w < 640, cols = one ? 1 : w > 980 ? 3 : 2;
+  const one = w < 640 || sheet, cols = one ? 1 : w > 980 ? 3 : 2;
   const cw = w / cols;
-  const base = { h: one ? w * .066 : cw * .074, q: one ? w * .05 : cw * .053, a: one ? w * .039 : cw * .041 };
+  const wf = sheet ? Math.min(w, 400) : w;
+  const base = { h: one ? wf * .066 : cw * .074, q: one ? wf * .05 : cw * .053, a: one ? wf * .039 : cw * .041 };
   const setF = k => {
     f.style.setProperty('--faq-h', clamp(base.h * k, 16, 38) + 'px');
     f.style.setProperty('--faq-q', clamp(base.q * k, 12.5, 26) + 'px');
@@ -810,8 +853,14 @@ function layoutFaq() {
   const map = $('#inkMap'), flt = $('#ink');
   if (map && window.CRUMPLE) {
     if (!map.getAttribute('href')) map.setAttribute('href', window.CRUMPLE);
-    const px = r.x + P[0] * r.sc, py = r.y + P[1] * r.sc;
-    Object.entries({ x: px - x0, y: py - y0, width: pw, height: ph }).forEach(([k, v]) => map.setAttribute(k, v.toFixed(1)));
+    let mx = r.x + P[0] * r.sc - x0, my = r.y + P[1] * r.sc - y0, mw = pw, mh = ph;
+    if (sheet) {   // the sheet shows the paper 'cover'-fitted (see .faq.sheet::before); the crease map follows it
+      const sc = $('#faqScroll'), bw = x1 - x0, bh = y1 - y0, k = Math.max(bw / FAQ_PAPER[0], bh / FAQ_PAPER[1]);
+      mw = FAQ_PAPER[0] * k * (P[2] - P[0]) / (FAQ_CROP[2] - FAQ_CROP[0]); mh = FAQ_PAPER[1] * k * (P[3] - P[1]) / (FAQ_CROP[3] - FAQ_CROP[1]);
+      mx = (bw - FAQ_PAPER[0] * k) / 2 - (FAQ_CROP[0] - P[0]) / (FAQ_CROP[2] - FAQ_CROP[0]) * FAQ_PAPER[0] * k - sc.offsetLeft;
+      my = (bh - FAQ_PAPER[1] * k) / 2 - (FAQ_CROP[1] - P[1]) / (FAQ_CROP[3] - FAQ_CROP[1]) * FAQ_PAPER[1] * k - sc.offsetTop;
+    }
+    Object.entries({ x: mx, y: my, width: mw, height: mh }).forEach(([k, v]) => map.setAttribute(k, v.toFixed(1)));
     Object.entries({ x: -30, y: -30, width: w + 60, height: (y1 - y0) + 60 }).forEach(([k, v]) => flt.setAttribute(k, v.toFixed(1)));
     $('feDisplacementMap', flt).setAttribute('scale', clamp(pw * .0055, 3, 7).toFixed(2));
   }
