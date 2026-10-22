@@ -5,8 +5,8 @@ const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const IMG = 'assets1/', VID = '', PRJ = 'assets1/';
 const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-const ORDER = [1, 2, 4, 8, 9];
-const STOPS = [1, 2, 4, 9]; // 8 is passed through without stopping
+const ORDER = [1, 2, 4, 9];
+const STOPS = [1, 2, 4, 9];
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const body = document.body;
@@ -83,7 +83,7 @@ function initImages() {
 
 /* ------------------------------------------------------------ video preload */
 const vurl = {};
-const VQUEUE = ['t12', 't24', 't48', 't89', 't910', 't910_r', 't12_r', 't24_r', 't48_r', 't89_r'];
+const VQUEUE = ['t12', 't24', 't49', 't910', 't910_r', 't12_r', 't24_r', 't49_r'];
 async function preloadVideos(onFirst) {
   for (const name of VQUEUE) {
     try {
@@ -188,8 +188,11 @@ function vmatrix(map, n, rr) {
 }
 const ease = u => u < .5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2;
 function setMatrix(el, u) {
-  const e = ease(u);
-  const m = seg.MA.map((v, i) => v + (seg.MB[i] - v) * e);
+  let A = seg.MA, B = seg.MB, e;
+  if (seg.MM) {        // one clip made of two shots: the framing passes exactly through the middle screen
+    if (u < seg.um) { B = seg.MM; e = ease(u / seg.um); } else { A = seg.MM; e = ease((u - seg.um) / (1 - seg.um)); }
+  } else e = ease(u);
+  const m = A.map((v, i) => v + (B[i] - v) * e);
   el.style.transform = `matrix(${m.join(',')})`;
 }
 let vbdRun = 0;
@@ -216,7 +219,7 @@ function backdropOff(ms) {
 function videoReady(v) {
   return new Promise((res, rej) => {
     if (v.readyState >= 2) return res();
-    const t = setTimeout(() => { cleanup(); rej(new Error('timeout')); }, 9000);
+    const t = setTimeout(() => { cleanup(); rej(new Error('timeout')); }, 6000);
     const ok = () => { cleanup(); res(); };
     const bad = () => { cleanup(); rej(new Error('error')); };
     function cleanup() { clearTimeout(t); v.removeEventListener('loadeddata', ok); v.removeEventListener('error', bad); }
@@ -244,14 +247,21 @@ async function runSeg(name, rev, from, to, opt = {}) {
   v.style.transition = 'none'; v.classList.remove('show');
   v.style.zIndex = 2; if (prev !== v) prev.style.zIndex = 1;
   const src = videoSrc(name + (rev ? '_r' : ''));
-  if (v.dataset.src !== src) { v.src = src; v.dataset.src = src; } else v.currentTime = 0;
+  if (v.dataset.src !== src) { v.src = src; v.dataset.src = src; try { v.load(); } catch (_) {} } else v.currentTime = 0;
   v.playbackRate = state.fast ? 2.2 : 1;
   await videoReady(v);
   seg.el = v;
-  seg.recalc = () => { seg.MA = vmatrix(mA, from); seg.MB = vmatrix(mB, to); setMatrix(v, clamp(v.currentTime / (v.duration || 1), 0, 1)); };
-  seg.MA = vmatrix(mA, from); seg.MB = vmatrix(mB, to); setMatrix(v, 0);
+  const mid = s.mid;
+  const calc = () => {
+    seg.MA = vmatrix(mA, from); seg.MB = vmatrix(mB, to);
+    seg.MM = mid ? vmatrix(mid.map, mid.slide) : null; seg.um = mid ? (rev ? 1 - mid.u : mid.u) : 0;
+  };
+  seg.recalc = () => { calc(); setMatrix(v, clamp(v.currentTime / (v.duration || 1), 0, 1)); };
+  calc(); setMatrix(v, 0);
   seg.active = true;
-  const p = v.play(); if (p) await p.catch(() => {});
+  let played = true;
+  try { await v.play(); } catch (e) { played = false; }
+  if (!played) { await wait(120); try { await v.play(); } catch (e) { throw new Error('play blocked'); } }
   await firstFrame(v);
   v.style.transition = `opacity ${fadeIn}ms linear`;
   v.classList.add('show');
@@ -262,11 +272,16 @@ async function runSeg(name, rev, from, to, opt = {}) {
   await new Promise(res => {
     let done = false;
     const finish = () => { if (!done) { done = true; res(); } };
+    let lastT = -1, lastChange = performance.now();
     const tick = () => {
       if (done) return;
-      const d = v.duration || 1, u = clamp(v.currentTime / d, 0, 1);
+      const d = v.duration || 1, u = clamp(v.currentTime / d, 0, 1), now = performance.now();
       setMatrix(v, u);
       if (v.ended || u >= .999) return finish();
+      // a phone may pause or starve the clip: nudge it, and never let the scene hang on it
+      if (v.currentTime !== lastT) { lastT = v.currentTime; lastChange = now; }
+      else if (now - lastChange > 400 && v.paused) { v.play().catch(() => {}); }
+      if (now - lastChange > 1800) return finish();
       requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);
@@ -296,12 +311,12 @@ function hideSlide(n, instant) {
   else el.classList.remove('on');
 }
 function prepare(n, segName) {
-  if (n === 4) ringPrepare(segName === 't48' || segName === 't24' ? 'empty' : 'blank');
+  if (n === 4) ringPrepare(['t48', 't49', 't24'].includes(segName) ? 'empty' : 'blank');
 }
 async function leave(n, segName) {
   const el = slides[n];
   el.classList.remove('ready');
-  if (n === 4) await ringLeave(segName === 't48' || segName === 't24' ? 'empty' : 'blank');
+  if (n === 4) await ringLeave(['t48', 't49', 't24'].includes(segName) ? 'empty' : 'blank');
   else if (n === 6) { $$('video', $('#vMedia')).forEach(v => v.pause()); await wait(300); }
   else if (n === 2 || n === 10 || n === 1) await wait(180);
 }
@@ -824,6 +839,34 @@ function initFaq() {
   const atEnd = () => f.classList.toggle('end', sc.scrollTop + sc.clientHeight >= sc.scrollHeight - 8);
   sc.addEventListener('scroll', atEnd, { passive: true }); addEventListener('resize', atEnd);
   setTimeout(atEnd, 500);
+  // Finger scrolling done by hand: some phones refuse to scroll a box inside a fixed, gesture-driven page
+  let t0 = null, vel = 0, raf = 0;
+  sc.addEventListener('touchstart', e => {
+    if (e.touches.length !== 1) return;
+    cancelAnimationFrame(raf);
+    t0 = { y: e.touches[0].clientY, top: sc.scrollTop, ly: e.touches[0].clientY, lt: performance.now() }; vel = 0;
+  }, { passive: true });
+  sc.addEventListener('touchmove', e => {
+    if (!t0 || e.touches.length !== 1) return;
+    const y = e.touches[0].clientY, now = performance.now();
+    const max = sc.scrollHeight - sc.clientHeight;
+    const next = t0.top - (y - t0.y);
+    if (max > 0 && !(next < 0 && sc.scrollTop <= 0 && y > t0.y && t0.top <= 0)) {
+      e.preventDefault();
+      sc.scrollTop = clamp(next, 0, max);
+      const dt = Math.max(1, now - t0.lt); vel = .8 * vel + .2 * (-(y - t0.ly) / dt * 16);
+      t0.ly = y; t0.lt = now;
+    }
+  }, { passive: false });
+  sc.addEventListener('touchend', () => {
+    if (!t0) return; t0 = null;
+    const glide = () => {
+      if (Math.abs(vel) < .4) return;
+      sc.scrollTop += vel; vel *= .95;
+      raf = requestAnimationFrame(glide);
+    };
+    raf = requestAnimationFrame(glide);
+  }, { passive: true });
   $('#faqCols').innerHTML = C.faq.map(s => `<section class="faq-sec"><h3>${s.section}</h3>${s.items.map(([q, a]) =>
     `<div class="faq-item"><p class="faq-q">${q}</p><p class="faq-a">${a}</p></div>`).join('')}</section>`).join('');
   $('#faqBack').addEventListener('click', () => go(9));
@@ -965,18 +1008,18 @@ function initInput() {
   let ts = null;
   addEventListener('touchstart', e => {
     if (e.touches.length !== 1) return (ts = null);
-    ts = { x: e.touches[0].clientX, y: e.touches[0].clientY, t: performance.now(), target: e.target };
+    ts = { x: e.touches[0].clientX, y: e.touches[0].clientY, t: performance.now(), target: e.target, scTop: $('#faqScroll').scrollTop };
   }, { passive: true });
   addEventListener('touchend', e => {
     if (!ts || !lb.hidden) return;
     const t = e.changedTouches[0], dx = t.clientX - ts.x, dy = t.clientY - ts.y;
-    const target = ts.target; ts = null;
+    const target = ts.target, scTop = ts.scTop; ts = null;
     if (Math.abs(dy) < 50 || Math.abs(dy) < Math.abs(dx) * 1.2) return;
     if (state.cur === 6) return;
     if (state.cur === 10) {
       const sc = $('#faqScroll');
       if (sc.contains(target) && sc.scrollHeight > sc.clientHeight + 2) {
-        const atTop = sc.scrollTop <= 1;
+        const atTop = scTop <= 1;      // only a pull from the very top (at the start of the gesture) leaves the FAQ
         if (!(dy > 0 && atTop)) return;
       }
     }
